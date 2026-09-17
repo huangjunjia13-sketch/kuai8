@@ -1,22 +1,15 @@
-# 快乐8开奖记录抓取器 V1
+# 开奖记录抓取器 V2
 
-静态网页版，可直接部署到 GitHub Pages。
+在原 V1 快乐8抓取器基础上增加 **福彩3D**。
 
-## 功能
-- 调用灰鸟免费彩票 API 的快乐8（`klb`）历史接口
-- 自动分页抓取
-- 按年份筛选（默认 2026）
-- 校验每期是否为 20 个不重复的 01–80 号码
-- 网页预览
-- 导出 `快乐8_2026.csv`
-- CSV 字段：`issue,date,n1,...,n20`
+## 使用
+1. 打开 `index.html`（或上传 GitHub Pages）。
+2. 在“彩种”选择 **快乐8** 或 **福彩3D**。
+3. 设置年份，点击“开始抓取”。
+4. 抓取完成后可导出/复制 CSV。
 
-## GitHub Pages
-把本目录文件上传到仓库根目录，Settings → Pages → Deploy from a branch → main / root。
+## CSV 格式
+- 快乐8：`issue,date,n1...n20`
+- 福彩3D：`issue,date,n1,n2,n3`
 
-## 重要
-这是纯前端版本。浏览器是否能直接抓取，取决于数据接口是否允许跨域（CORS）。
-如果 GitHub Pages 打开后日志显示 `Failed to fetch` / `CORS`，需要增加一个 Cloudflare Worker / Pages Function 代理接口；前端解析和 CSV 导出部分无需重写。
-
-数据接口文档：
-https://api.huiniao.top/
+数据接口使用灰鸟彩票历史接口：快乐8 `type=klb`，福彩3D `type=fcsd`。

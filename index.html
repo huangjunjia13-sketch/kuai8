@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#111827">
-<title>快乐8开奖记录抓取器 V1</title>
+<title>开奖记录抓取器 V2</title>
 <style>
 *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#111827}
 .wrap{max-width:1050px;margin:auto;padding:18px}.card{background:#fff;border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 3px 16px #0000000c}
-h1{font-size:23px;margin:0 0 6px}.sub{color:#6b7280;font-size:13px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+h1{font-size:23px;margin:0 0 6px}.sub{color:#6b7280;font-size:13px}.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px}
 label{font-size:12px;color:#6b7280;display:block;margin-bottom:5px}input{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}button{border:0;border-radius:10px;padding:11px 16px;font-size:15px;font-weight:600;cursor:pointer}
 .primary{background:#111827;color:white}.secondary{background:#e5e7eb;color:#111827}.danger{background:#fee2e2;color:#991b1b}
@@ -22,9 +22,10 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px 5px;b
 </head>
 <body><div class="wrap">
 <div class="card">
-  <h1>快乐8开奖记录抓取器 <small style="font-size:12px;color:#6b7280">V1</small></h1>
-  <div class="sub">数据接口：灰鸟免费彩票 API（klb）。抓取后在浏览器内校验，并导出标准 CSV。</div>
+  <h1>开奖记录抓取器 <small style="font-size:12px;color:#6b7280">V2</small></h1>
+  <div class="sub">支持快乐8 + 福彩3D。数据接口：灰鸟免费彩票 API；抓取后在浏览器内校验，并分别导出标准 CSV。</div>
   <div class="grid">
+    <div><label>彩种</label><select id="lottery" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:white"><option value="klb">快乐8</option><option value="fcsd">福彩3D</option></select></div>
     <div><label>年份</label><input id="year" type="number" value="2026"></div>
     <div><label>每页数量</label><input id="limit" type="number" value="100" min="1" max="500"></div>
     <div><label>起始页</label><input id="startPage" type="number" value="1" min="1"></div>
@@ -47,7 +48,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px 5px;b
 </div>
 
 <div class="card"><b>运行日志</b><div id="log" style="margin-top:10px">等待开始…</div></div>
-<div class="card"><b>2026 年数据预览</b><div class="tablewrap" style="margin-top:10px"><table id="table"></table></div></div>
+<div class="card"><b id="previewTitle">2026 年快乐8数据预览</b><div class="tablewrap" style="margin-top:10px"><table id="table"></table></div></div>
 </div>
 
 <script>
@@ -57,35 +58,34 @@ const $ = id => document.getElementById(id);
 function log(s){ $('log').textContent += '\n' + s; $('log').scrollTop=$('log').scrollHeight; }
 function pick(obj, names){ for(const n of names){ if(obj[n]!==undefined && obj[n]!==null && obj[n]!=='') return obj[n]; } return null; }
 
+function currentType(){ return $('lottery').value; }
+function currentName(){ return currentType()==='fcsd' ? '福彩3D' : '快乐8'; }
+function expectedCount(){ return currentType()==='fcsd' ? 3 : 20; }
+function maxNumber(){ return currentType()==='fcsd' ? 9 : 80; }
+
 function normalize(item){
   const issue = String(pick(item,['code','issue','expect','period','lottery_no']) ?? '');
   const date = String(pick(item,['day','date','open_date','opendate']) ?? '').slice(0,10);
   let nums=[];
-  // 灰鸟不同彩种通常使用 one/two/...；同时兼容数组/字符串字段。
   const direct = pick(item,['numbers','number','openCode','open_code','result','red']);
   if(Array.isArray(direct)) nums = direct.map(Number);
   else if(typeof direct==='string') nums = direct.match(/\d+/g)?.map(Number) || [];
-  if(nums.length < 20){
-    const wordNames=['one','two','three','four','five','six','seven','eight','nine','ten',
+  const wordNames=['one','two','three','four','five','six','seven','eight','nine','ten',
       'eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'];
-    nums = wordNames.map(k=>item[k]).filter(v=>v!==undefined && v!==null && v!=='').map(Number);
-  }
-  // 最后兜底：寻找值为 1..80 的开奖字段，但排除期号/时间等。
-  if(nums.length < 20){
-    const candidates=[];
-    for(const [k,v] of Object.entries(item)){
-      if(/code|time|day|date|page|count|id/i.test(k)) continue;
-      if(Number.isInteger(Number(v)) && Number(v)>=1 && Number(v)<=80) candidates.push(Number(v));
-    }
-    if(candidates.length>=20) nums=candidates.slice(0,20);
+  const need=expectedCount();
+  if(nums.length < need){
+    nums = wordNames.slice(0,need).map(k=>item[k]).filter(v=>v!==undefined && v!==null && v!=='').map(Number);
   }
   return {issue,date,nums};
 }
 
 function validRow(r){
-  return r.issue && /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
-         r.nums.length===20 && new Set(r.nums).size===20 &&
-         r.nums.every(n=>Number.isInteger(n)&&n>=1&&n<=80);
+  const need=expectedCount(), max=maxNumber();
+  const base = r.issue && /^\d{4}-\d{2}-\d{2}$/.test(r.date) && r.nums.length===need &&
+         r.nums.every(n=>Number.isInteger(n)&&n>=0&&n<=max);
+  // 快乐8 20个号码不能重复；福彩3D允许重复数字（如 1,1,8）。
+  return base && (currentType()==='fcsd' || new Set(r.nums).size===need) &&
+         (currentType()==='fcsd' || r.nums.every(n=>n>=1));
 }
 function render(){
   const year=String($('year').value);
@@ -93,16 +93,18 @@ function render(){
   $('count').textContent=rows.length; $('yearCount').textContent=yr.length;
   $('minDate').textContent=yr[0]?.date||'-'; $('maxDate').textContent=yr.at(-1)?.date||'-';
   $('csvBtn').disabled=!yr.length; $('copyBtn').disabled=!yr.length;
-  const head=['期号','日期',...Array.from({length:20},(_,i)=>'n'+(i+1))];
-  $('table').innerHTML='<thead><tr>'+head.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
+  $('previewTitle').textContent=`${year} 年${currentName()}数据预览`;
+  const head=['期号','日期',...Array.from({length:expectedCount()},(_,i)=>'n'+(i+1))];
+  $('table').innerHTML='<thead><tr>'+head.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+ 
     yr.slice().reverse().map(r=>'<tr><td>'+r.issue+'</td><td>'+r.date+'</td>'+r.nums.map(n=>'<td>'+String(n).padStart(2,'0')+'</td>').join('')+'</tr>').join('')+'</tbody>';
 }
 function csvText(){
   const year=String($('year').value);
   const yr=rows.filter(r=>r.date.startsWith(year)).sort((a,b)=>a.date.localeCompare(b.date)||a.issue.localeCompare(b.issue));
-  return ['issue,date,'+Array.from({length:20},(_,i)=>'n'+(i+1)).join(','),
+  return ['issue,date,'+Array.from({length:expectedCount()},(_,i)=>'n'+(i+1)).join(','),
     ...yr.map(r=>[r.issue,r.date,...r.nums.map(n=>String(n).padStart(2,'0'))].join(','))].join('\n');
 }
+$('lottery').onchange=()=>{ rows=[]; $('log').textContent=`已切换到${currentName()}。`; $('bar').style.width='0'; render(); };
 $('fetchBtn').onclick=async()=>{
   rows=[]; render(); $('log').textContent='开始抓取…';
   const year=Number($('year').value), limit=Number($('limit').value), start=Number($('startPage').value), max=Number($('maxPages').value);
@@ -111,7 +113,7 @@ $('fetchBtn').onclick=async()=>{
   try{
     for(let page=start;page<start+max;page++){
       $('bar').style.width=((page-start)/max*100)+'%';
-      const url=`${API}?type=klb&page=${page}&limit=${limit}`;
+      const url=`${API}?type=${currentType()}&page=${page}&limit=${limit}`;
       log(`第 ${page} 页：请求中…`);
       const res=await fetch(url,{cache:'no-store'});
       if(!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -145,7 +147,7 @@ $('fetchBtn').onclick=async()=>{
 };
 $('csvBtn').onclick=()=>{
  const text='\ufeff'+csvText(), blob=new Blob([text],{type:'text/csv;charset=utf-8'});
- const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`快乐8_${$('year').value}.csv`; a.click(); URL.revokeObjectURL(a.href);
+ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${currentName()}_${$('year').value}.csv`; a.click(); URL.revokeObjectURL(a.href);
 };
 $('copyBtn').onclick=async()=>{await navigator.clipboard.writeText(csvText());log('CSV 已复制到剪贴板。');};
 $('clearBtn').onclick=()=>{rows=[];$('log').textContent='已清空。';$('bar').style.width='0';render();};
