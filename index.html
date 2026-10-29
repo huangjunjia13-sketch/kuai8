@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#111827">
-<title>开奖记录抓取器 V3</title>
+<title>开奖记录抓取器 V4</title>
 <style>
 *{box-sizing:border-box} body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f3f4f6;color:#111827}
 .wrap{max-width:1050px;margin:auto;padding:18px}.card{background:#fff;border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 3px 16px #0000000c}
@@ -22,10 +22,10 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px 5px;b
 </head>
 <body><div class="wrap">
 <div class="card">
-  <h1>开奖记录抓取器 <small style="font-size:12px;color:#6b7280">V3</small></h1>
-  <div class="sub">支持快乐8、福彩3D、香港六合彩、老澳门六合彩、新澳门六合彩。抓取后在浏览器内校验，并分别导出标准 CSV。</div>
+  <h1>开奖记录抓取器 <small style="font-size:12px;color:#6b7280">V4</small></h1>
+  <div class="sub">支持快乐8、福彩3D、七乐彩。七乐彩保留接口原始号码顺序，用于核对是否为落球顺序。</div>
   <div class="grid">
-    <div><label>彩种</label><select id="lottery" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:white"><option value="klb">快乐8</option><option value="fcsd">福彩3D</option><option value="hk6">香港六合彩</option><option value="oldMacau">老澳门六合彩</option><option value="newMacau">新澳门六合彩</option></select></div>
+    <div><label>彩种</label><select id="lottery" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:white"><option value="klb">快乐8</option><option value="fcsd">福彩3D</option><option value="qlc">七乐彩</option></select></div>
     <div><label>年份</label><input id="year" type="number" value="2026"></div>
     <div><label>每页数量</label><input id="limit" type="number" value="100" min="1" max="500"></div>
     <div><label>起始页</label><input id="startPage" type="number" value="1" min="1"></div>
@@ -48,25 +48,20 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px 5px;b
 </div>
 
 <div class="card"><b>运行日志</b><div id="log" style="margin-top:10px">等待开始…</div></div>
-<div class="card"><b id="previewTitle">2026 年快乐8数据预览</b><div class="tablewrap" style="margin-top:10px"><table id="table"></table></div></div>
+<div class="card"><div class="sub" style="margin-bottom:8px">七乐彩 n1～n7 按接口返回的原始排列显示，sp 为特别号；此顺序尚未证实为真实落球顺序。抓取时运行日志会显示接口首条原始 JSON。</div><b id="previewTitle">2026 年快乐8数据预览</b><div class="tablewrap" style="margin-top:10px"><table id="table"></table></div></div>
 </div>
 
 <script>
 const HUINIAO_API = 'https://api.huiniao.top/interface/home/lotteryHistory';
-const LHC_API = {
-  hk6: 'https://1234kj.com/api/opencode/2034?type=all',
-  oldMacau: 'https://1234kj.com/api/opencode/2032?type=all',
-  newMacau: 'https://1234kj.com/api/opencode/2033?type=all'
-};
 let rows = [];
 const $ = id => document.getElementById(id);
 function log(s){ $('log').textContent += '\n' + s; $('log').scrollTop=$('log').scrollHeight; }
 function pick(obj, names){ for(const n of names){ if(obj[n]!==undefined && obj[n]!==null && obj[n]!=='') return obj[n]; } return null; }
 function currentType(){ return $('lottery').value; }
-function isLhc(){ return ['hk6','oldMacau','newMacau'].includes(currentType()); }
-function currentName(){ return ({klb:'快乐8',fcsd:'福彩3D',hk6:'香港六合彩',oldMacau:'老澳门六合彩',newMacau:'新澳门六合彩'})[currentType()]; }
-function expectedCount(){ return currentType()==='fcsd' ? 3 : (isLhc()?7:20); }
-function maxNumber(){ return currentType()==='fcsd' ? 9 : (isLhc()?49:80); }
+function isQlc(){ return currentType()==='qlc'; }
+function currentName(){ return ({klb:'快乐8',fcsd:'福彩3D',qlc:'七乐彩'})[currentType()]; }
+function expectedCount(){ return currentType()==='fcsd' ? 3 : (isQlc()?8:20); }
+function maxNumber(){ return currentType()==='fcsd' ? 9 : (isQlc()?30:80); }
 function normalizeHuiniao(item){
   const issue = String(pick(item,['code','issue','expect','period','lottery_no']) ?? '');
   const date = String(pick(item,['day','date','open_date','opendate']) ?? '').slice(0,10);
@@ -74,14 +69,12 @@ function normalizeHuiniao(item){
   if(Array.isArray(direct)) nums=direct.map(Number); else if(typeof direct==='string') nums=direct.match(/\d+/g)?.map(Number)||[];
   const names=['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'];
   if(nums.length<expectedCount()) nums=names.slice(0,expectedCount()).map(k=>item[k]).filter(v=>v!==undefined&&v!==null&&v!=='').map(Number);
-  return {issue,date,nums};
-}
-function normalizeLhc(item){
-  const issue=String(item.issue??item.expect??'');
-  const date=String(item.openTime??item.open_time??item.date??'').slice(0,10);
-  const raw=String(item.openCode??item.open_code??item.code??'');
-  const nums=(raw.match(/\d+/g)||[]).slice(0,7).map(Number);
-  return {issue,date,nums};
+  // 七乐彩：有些接口将特别号单独放在 blue / special 等字段，不能误当成第8个基本号。
+  if(isQlc() && nums.length===7){
+    const special=pick(item,['special','specialNumber','special_number','blue','blueBall','blue_ball','sp','extra','bonus']);
+    if(special!==null){const m=String(special).match(/\d+/);if(m)nums.push(Number(m[0]));}
+  }
+  return {issue,date,nums,raw:JSON.stringify(item)};
 }
 function validRow(r){
   const need=expectedCount(), max=maxNumber();
@@ -96,12 +89,12 @@ function render(){
   $('minDate').textContent=yr[0]?.date||'-'; $('maxDate').textContent=yr.at(-1)?.date||'-'; $('csvBtn').disabled=!yr.length; $('copyBtn').disabled=!yr.length;
   $('previewTitle').textContent=`${$('year').value} 年${currentName()}数据预览`;
   let head;
-  if(isLhc()) head=['期号','日期','n1','n2','n3','n4','n5','n6','sp']; else head=['期号','日期',...Array.from({length:expectedCount()},(_,i)=>'n'+(i+1))];
+  if(isQlc()) head=['期号','日期','n1','n2','n3','n4','n5','n6','n7','sp']; else head=['期号','日期',...Array.from({length:expectedCount()},(_,i)=>'n'+(i+1))];
   $('table').innerHTML='<thead><tr>'+head.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+yr.slice().reverse().map(r=>'<tr><td>'+r.issue+'</td><td>'+r.date+'</td>'+r.nums.map(n=>'<td>'+String(n).padStart(2,'0')+'</td>').join('')+'</tr>').join('')+'</tbody>';
 }
 function csvText(){
   const yr=yearRows();
-  const header=isLhc()?'issue,date,n1,n2,n3,n4,n5,n6,sp':'issue,date,'+Array.from({length:expectedCount()},(_,i)=>'n'+(i+1)).join(',');
+  const header=isQlc()?'issue,date,n1,n2,n3,n4,n5,n6,n7,sp':'issue,date,'+Array.from({length:expectedCount()},(_,i)=>'n'+(i+1)).join(',');
   return [header,...yr.map(r=>[r.issue,r.date,...r.nums.map(n=>String(n).padStart(2,'0'))].join(','))].join('\n');
 }
 $('lottery').onchange=()=>{ rows=[]; $('log').textContent=`已切换到${currentName()}。`; $('bar').style.width='0'; render(); };
@@ -109,25 +102,16 @@ $('fetchBtn').onclick=async()=>{
   rows=[]; render(); $('log').textContent='开始抓取…'; $('fetchBtn').disabled=true;
   const year=Number($('year').value), limit=Number($('limit').value), start=Number($('startPage').value), max=Number($('maxPages').value);
   try{
-    if(isLhc()){
-      log(`${currentName()}：请求开奖记录…`);
-      const res=await fetch(LHC_API[currentType()],{cache:'no-store'}); if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json=await res.json(); const list=Array.isArray(json?.data)?json.data:(Array.isArray(json)?json:[]);
-      const seen=new Set();
-      for(const item of list){ const r=normalizeLhc(item); if(!validRow(r)) continue; const key=r.issue+'|'+r.date; if(!seen.has(key)){seen.add(key);rows.push(r);} }
-      log(`接口返回 ${list.length} 条，可识别 ${rows.length} 条；${year} 年 ${yearRows().length} 条。`);
-      if(!yearRows().length) log(`没有识别到 ${year} 年记录，请检查接口是否提供该年份历史。`);
-    }else{
       let seen=new Set(),foundOlder=false;
       for(let page=start;page<start+max;page++){
         $('bar').style.width=((page-start)/max*100)+'%'; const url=`${HUINIAO_API}?type=${currentType()}&page=${page}&limit=${limit}`; log(`第 ${page} 页：请求中…`);
         const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error(`HTTP ${res.status}`); const json=await res.json(); if(Number(json.code)!==1) throw new Error(json.info||'接口返回失败');
         const list=json?.data?.data?.list; if(!Array.isArray(list)||!list.length){log('没有更多数据，停止。');break;}
-        let pageYears=[]; for(const item of list){const r=normalizeHuiniao(item);if(!validRow(r))continue;pageYears.push(Number(r.date.slice(0,4)));const key=r.issue+'|'+r.date;if(!seen.has(key)){seen.add(key);rows.push(r);}}
-        log(`第 ${page} 页：有效 ${pageYears.length} 条；累计 ${rows.length} 条。`); render(); if(pageYears.some(y=>y<year))foundOlder=true; if(foundOlder&&!pageYears.some(y=>y>=year)){log(`已翻到 ${year} 年以前，自动结束。`);break;}
+        if(isQlc() && page===start){log('七乐彩接口首条原始记录（供核对号码字段和顺序）：');log(JSON.stringify(list[0],null,2));}
+        let pageYears=[]; let invalid=0; for(const item of list){const r=normalizeHuiniao(item);if(!validRow(r)){invalid++;continue;}pageYears.push(Number(r.date.slice(0,4)));const key=r.issue+'|'+r.date;if(!seen.has(key)){seen.add(key);rows.push(r);}}
+        log(`第 ${page} 页：有效 ${pageYears.length} 条；未识别 ${invalid} 条；累计 ${rows.length} 条。`); render(); if(pageYears.some(y=>y<year))foundOlder=true; if(foundOlder&&!pageYears.some(y=>y>=year)){log(`已翻到 ${year} 年以前，自动结束。`);break;}
         const totalPage=Number(json?.data?.data?.totalPage||0);if(totalPage&&page>=totalPage)break;await new Promise(r=>setTimeout(r,250));
       }
-    }
     log(`完成：${year} 年 ${yearRows().length} 期。`);
   }catch(e){ log('抓取失败：'+e.message); log('如果显示 Failed to fetch / CORS，说明数据源禁止 GitHub Pages 跨域直连，需要再加同源代理。'); }
   finally{$('bar').style.width='100%';$('fetchBtn').disabled=false;render();}
