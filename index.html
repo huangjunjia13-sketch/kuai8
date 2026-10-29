@@ -25,7 +25,7 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px 5px;b
   <h1>开奖记录抓取器 <small style="font-size:12px;color:#6b7280">V4</small></h1>
   <div class="sub">支持快乐8、福彩3D、七乐彩。七乐彩保留接口原始号码顺序，用于核对是否为落球顺序。</div>
   <div class="grid">
-    <div><label>彩种</label><select id="lottery" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:white"><option value="klb">快乐8</option><option value="fcsd">福彩3D</option><option value="qlc">七乐彩</option></select></div>
+    <div><label>彩种</label><select id="lottery" style="width:100%;padding:11px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:white"><option value="klb">快乐8</option><option value="fcsd">福彩3D</option><option value="qlc">七乐彩（汇鸟升序）</option><option value="qlc500">七乐彩（500网落球顺序）</option></select></div>
     <div><label>年份</label><input id="year" type="number" value="2026"></div>
     <div><label>每页数量</label><input id="limit" type="number" value="100" min="1" max="500"></div>
     <div><label>起始页</label><input id="startPage" type="number" value="1" min="1"></div>
@@ -47,8 +47,8 @@ table{border-collapse:collapse;width:100%;font-size:12px}th,td{padding:7px 5px;b
  <div class="stat"><label>最新日期</label><div class="v" id="maxDate">-</div></div>
 </div>
 
-<div class="card"><b>运行日志</b><div id="log" style="margin-top:10px">等待开始…</div></div>
-<div class="card"><div class="sub" style="margin-bottom:8px">七乐彩 n1～n7 按接口返回的原始排列显示，sp 为特别号；此顺序尚未证实为真实落球顺序。抓取时运行日志会显示接口首条原始 JSON。</div><b id="previewTitle">2026 年快乐8数据预览</b><div class="tablewrap" style="margin-top:10px"><table id="table"></table></div></div>
+<div class="card" id="outballBox" style="display:none"><b>500网七乐彩落球顺序测试</b><p class="sub">优先尝试直接读取500网出球顺序页面。若浏览器阻止跨域访问，可在下方粘贴该网页复制的开奖表格文本，或粘贴网页HTML源码后解析。页面默认可能只有最近30期；未覆盖全年时不会冒充全年已抓取。</p><p><a href="https://datachart.500star.com/qlc/history/outball.shtml" target="_blank" rel="noopener">打开500网七乐彩出球顺序</a></p><textarea id="paste500" placeholder="粘贴500网表格文本或网页HTML。示例：26124 2026-10-28 06 04 22 11 26 02 12 02 04 06 11 12 22 26 27" style="width:100%;min-height:110px;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:14px"></textarea><button id="parse500" style="margin-top:8px">解析粘贴的落球顺序</button></div><div class="card"><b>运行日志</b><div id="log" style="margin-top:10px">等待开始…</div></div>
+<div class="card"><div class="sub" style="margin-bottom:8px">七乐彩（汇鸟）仅为升序；七乐彩（500网）n1～n7 是网站明确标注的出球顺序，sp 为特别号。请核对记录数量与日期。</div><b id="previewTitle">2026 年快乐8数据预览</b><div class="tablewrap" style="margin-top:10px"><table id="table"></table></div></div>
 </div>
 
 <script>
@@ -58,8 +58,8 @@ const $ = id => document.getElementById(id);
 function log(s){ $('log').textContent += '\n' + s; $('log').scrollTop=$('log').scrollHeight; }
 function pick(obj, names){ for(const n of names){ if(obj[n]!==undefined && obj[n]!==null && obj[n]!=='') return obj[n]; } return null; }
 function currentType(){ return $('lottery').value; }
-function isQlc(){ return currentType()==='qlc'; }
-function currentName(){ return ({klb:'快乐8',fcsd:'福彩3D',qlc:'七乐彩'})[currentType()]; }
+function isQlc(){ return ['qlc','qlc500'].includes(currentType()); }
+function currentName(){ return ({klb:'快乐8',fcsd:'福彩3D',qlc:'七乐彩（升序）',qlc500:'七乐彩（落球顺序）'})[currentType()]; }
 function expectedCount(){ return currentType()==='fcsd' ? 3 : (isQlc()?8:20); }
 function maxNumber(){ return currentType()==='fcsd' ? 9 : (isQlc()?30:80); }
 function normalizeHuiniao(item){
@@ -97,11 +97,12 @@ function csvText(){
   const header=isQlc()?'issue,date,n1,n2,n3,n4,n5,n6,n7,sp':'issue,date,'+Array.from({length:expectedCount()},(_,i)=>'n'+(i+1)).join(',');
   return [header,...yr.map(r=>[r.issue,r.date,...r.nums.map(n=>String(n).padStart(2,'0'))].join(','))].join('\n');
 }
-$('lottery').onchange=()=>{ rows=[]; $('log').textContent=`已切换到${currentName()}。`; $('bar').style.width='0'; render(); };
+$('lottery').onchange=()=>{ $('outballBox').style.display=currentType()==='qlc500'?'block':'none'; rows=[]; $('log').textContent=`已切换到${currentName()}。`; $('bar').style.width='0'; render(); };
 $('fetchBtn').onclick=async()=>{
   rows=[]; render(); $('log').textContent='开始抓取…'; $('fetchBtn').disabled=true;
   const year=Number($('year').value), limit=Number($('limit').value), start=Number($('startPage').value), max=Number($('maxPages').value);
   try{
+      if(currentType()==='qlc500'){await fetch500();return;}
       let seen=new Set(),foundOlder=false;
       for(let page=start;page<start+max;page++){
         $('bar').style.width=((page-start)/max*100)+'%'; const url=`${HUINIAO_API}?type=${currentType()}&page=${page}&limit=${limit}`; log(`第 ${page} 页：请求中…`);
@@ -116,6 +117,42 @@ $('fetchBtn').onclick=async()=>{
   }catch(e){ log('抓取失败：'+e.message); log('如果显示 Failed to fetch / CORS，说明数据源禁止 GitHub Pages 跨域直连，需要再加同源代理。'); }
   finally{$('bar').style.width='100%';$('fetchBtn').disabled=false;render();}
 };
+
+function parse500Text(text){
+  // 500网出球顺序表：期号 日期 [7个落球号] [7个升序号] [特别号]
+  // 只接受具有两组号码且两组集合完全相同的行，杜绝把升序误当落球顺序。
+  const found=[];let rejected=0;
+  const normalized=text.replace(/<\/tr\s*>/gi,'\n').replace(/<\/t[dh]\s*>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/\u00a0/g,' ');
+  for(const line of normalized.split(/\r?\n/)){
+    const match=line.replace(/\t/g,' ').replace(/\s+/g,' ').match(/(?:^|\s)(\d{5,7})\s+(20\d{2}-\d{2}-\d{2})\s+((?:\d{1,2}\s+){14}\d{1,2})(?=\s|$)/);
+    if(!match)continue;
+    const nums=match[3].trim().split(/\s+/).map(Number),ball=nums.slice(0,7),sorted=nums.slice(7,14),sp=nums[14];
+    if(nums.length!==15||ball.some(n=>n<1||n>30)||sp<1||sp>30||new Set([...ball,sp]).size!==8||ball.slice().sort((a,b)=>a-b).join(',')!==sorted.join(',')){rejected++;continue;}
+    found.push({issue:match[1],date:match[2],nums:[...ball,sp],raw:line});
+  }
+  return {found,rejected};
+}
+function merge500(parsed){
+  const before=rows.length,byKey=new Map(rows.map(r=>[r.issue+'|'+r.date,r]));
+  for(const r of parsed.found)byKey.set(r.issue+'|'+r.date,r);
+  rows=[...byKey.values()];render();
+  log(`500网落球顺序：识别 ${parsed.found.length} 期，校验拒绝 ${parsed.rejected} 行；新增 ${rows.length-before} 期；${$('year').value} 年合计 ${yearRows().length} 期。`);
+  if(parsed.found.length===0)log('未识别到有效记录。请复制500网“出球顺序”表格文本（含期号、日期、两组7号码和特别号），或尝试粘贴网页源码。');
+}
+async function fetch500(){
+  const url='https://datachart.500star.com/qlc/history/outball.shtml';
+  log('尝试直接读取500网出球顺序页面（可能因CORS失败）…');
+  try{
+    const resp=await fetch(url,{cache:'no-store'});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const html=await resp.text();
+    const doc=new DOMParser().parseFromString(html,'text/html');
+    const lines=[...doc.querySelectorAll('tr')].map(tr=>tr.innerText||tr.textContent||'').join('\n');
+    merge500(parse500Text(lines));
+  }catch(e){log('500网无法从GitHub Pages直接跨域读取：'+e.message);log('请打开上方500网链接，将表格内容复制粘贴后点击“解析粘贴的落球顺序”；若需自动抓取全年，需要同源代理及历史范围请求的进一步验证。');}
+}
+$('parse500').onclick=()=>{if(currentType()!=='qlc500')return;merge500(parse500Text($('paste500').value));};
+
 $('csvBtn').onclick=()=>{const text='\ufeff'+csvText(),blob=new Blob([text],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${currentName()}_${$('year').value}.csv`;a.click();URL.revokeObjectURL(a.href);};
 $('copyBtn').onclick=async()=>{await navigator.clipboard.writeText(csvText());log('CSV 已复制到剪贴板。');};
 $('clearBtn').onclick=()=>{rows=[];$('log').textContent='已清空。';$('bar').style.width='0';render();};
